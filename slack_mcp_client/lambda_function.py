@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 # --- Bedrock Configuration ---
 boto3_session = boto3.Session() # Consider region_name if needed
 bedrock_runtime = boto3_session.client('bedrock-runtime')
-CLAUDE_MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0"
+CLAUDE_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 
 # --- MCP Server Configuration ---
 # Use MCP_SSE_SERVER_URL for the SSE endpoint
