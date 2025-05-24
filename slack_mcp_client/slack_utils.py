@@ -100,3 +100,72 @@ def parse_slack_event_body(event):
     except json.JSONDecodeError:
         logger.error("Failed to parse request body as JSON.")
         return None 
+    
+def get_thread_history(channel_id: str, thread_ts: str) -> List[dict]:
+    """
+    특정 스레드의 모든 메시지를 가져옵니다.
+    """
+    if not SLACK_BOT_TOKEN:
+        logger.warning("SLACK_BOT_TOKEN not set, cannot fetch thread history")
+        return []
+    
+    try:
+        client = WebClient(token=SLACK_BOT_TOKEN)
+        
+        # conversations.replies API 사용
+        response = client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+            inclusive=True  # 루트 메시지도 포함
+        )
+        
+        messages = response['messages']
+        logger.info(f"Fetched {len(messages)} messages from thread {thread_ts}")
+        return messages
+        
+    except SlackApiError as e:
+        logger.error(f"Error fetching thread history: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error fetching thread history: {e}")
+        return []
+
+def format_thread_for_bedrock(messages: List[dict], bot_user_id: Optional[str] = None) -> List[dict]:
+    """
+    Slack 메시지들을 Bedrock conversation format으로 변환
+    """
+    conversation = []
+    
+    for msg in messages:
+        # 봇 메시지인지 사용자 메시지인지 구분
+        if msg.get('bot_id') or (bot_user_id and msg.get('user') == bot_user_id):
+            role = "assistant"
+        else:
+            role = "user"
+        
+        # 텍스트 내용 추출 및 정리
+        text = clean_slack_message(msg.get('text', ''))
+        
+        if text.strip():  # 빈 메시지 제외
+            conversation.append({
+                "role": role,
+                "content": [{"text": text}]
+            })
+    
+    return conversation
+
+def clean_slack_message(text: str) -> str:
+    """Slack 포맷팅 제거 (mentions, channels 등)"""
+    import re
+    
+    # <@U123456> 형태의 사용자 멘션 제거
+    text = re.sub(r'<@[UW][A-Z0-9]+>', '', text)
+    
+    # <#C123456|channel-name> 형태의 채널 멘션 정리
+    text = re.sub(r'<#[C][A-Z0-9]+\|([^>]+)>', r'#\1', text)
+    
+    # URL 형태 정리 <http://example.com|example.com>
+    text = re.sub(r'<(https?://[^|>]+)\|([^>]+)>', r'\2 (\1)', text)
+    text = re.sub(r'<(https?://[^>]+)>', r'\1', text)
+    
+    return text.strip()
